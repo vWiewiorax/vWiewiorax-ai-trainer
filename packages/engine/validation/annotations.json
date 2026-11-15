@@ -1,0 +1,51 @@
+[
+  {
+    "id": "peso_muerto",
+    "kind": "real",
+    "source": "Animated 3D demonstration (rendered human model, not a filmed athlete), 720x480 @25 fps, 30.4 s",
+    "landmarksFile": "real/peso_muerto.landmarks.json",
+    "exercise": "conventional-deadlift",
+    "variation": "barbell",
+    "cameraView": "side",
+    "conditions": ["rendered model", "plates occlude near shin", "starts standing away from the bar", "two short fades to black"],
+    "expectedRepCount": 1,
+    "repetitions": [{ "start": 11500, "end": 21500, "complete": true }],
+    "visibleLandmarks": "Near-side knee/ankle partly hidden by the plate at setup; far side mostly occluded.",
+    "errors": [],
+    "annotator": "Devin (non-expert, labelled from a 1 fps storyboard)",
+    "annotationConfidence": 0.5,
+    "notes": "A second lift starts at ~28 s and is cut off before lowering, so only one complete repetition. No technique labels: an expert has not reviewed the clip."
+  },
+  {
+    "id": "deadlift_demo",
+    "kind": "real",
+    "source": "Gym demonstration clip, 1280x720 @30 fps, 7.4 s, rear-oblique camera with hard cuts and text overlays",
+    "landmarksFile": "real/deadlift_demo.landmarks.json",
+    "exercise": "conventional-deadlift",
+    "variation": "barbell",
+    "cameraView": "mixed",
+    "conditions": ["rear-oblique view", "edited cuts", "text overlays"],
+    "expectedRepCount": 1,
+    "errors": [],
+    "expectUnscorable": true,
+    "annotator": "Devin (non-expert, labelled from a storyboard)",
+    "annotationConfidence": 0.4,
+    "notes": "Not a supported camera setup. The useful check is that the engine does not produce a confident technique score."
+  },
+  {
+    "id": "acft_deadlift",
+    "kind": "real",
+    "source": "Army fitness test footage, 1920x1080 @29.97 fps, 75.9 s, many people, frequent cuts",
+    "landmarksFile": "real/acft_deadlift.landmarks.json",
+    "exercise": "conventional-deadlift",
+    "variation": "trap bar (hex bar) - a different exercise from the conventional barbell deadlift",
+    "cameraView": "mixed",
+    "conditions": ["trap bar", "multiple people in frame", "edited cuts", "outdoor lighting"],
+    "expectedRepCount": 0,
+    "errors": [],
+    "expectUnscorable": true,
+    "annotator": "Devin (non-expert, labelled from a storyboard)",
+    "annotationConfidence": 0.3,
+    "notes": "Robustness clip only. Repetitions across cuts and different people must not be stitched into a confident set report; expectedRepCount 0 means no trustworthy set should be counted."
+  }
+]
