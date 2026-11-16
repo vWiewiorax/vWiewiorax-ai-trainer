@@ -1,15 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { BrowserSpeech, EXERCISES, ExerciseAnalyzer, deadlift, type FeedbackItem, type LiveState, type ReferenceModel, type TechniqueAnalysis } from "@trainer/engine";
-import { LivePoseSource, openCamera, type LivePoseStats, type OpenCamera } from "@trainer/engine/browser";
+import { LivePoseSource, describeCameraError, listCameras, openCamera, type LivePoseStats, type OpenCamera } from "@trainer/engine/browser";
 import { drawOverlay } from "./overlay";
 import { IconAlert, IconCamera, IconMute, IconStop, IconVolume } from "./icons";
 import Report from "./Report";
 import { REFERENCE_STORAGE_KEY } from "./referenceStorage";
 import { ExerciseSelect } from "./ExerciseSelect";
 
-type Phase = "idle" | "loading" | "running" | "report" | "error";
+type Phase = "idle" | "opening" | "preview" | "loading" | "running" | "report" | "error";
+
+const RESOLUTIONS = { "480": [640, 480], "720": [1280, 720], "1080": [1920, 1080] } as const;
+type Resolution = keyof typeof RESOLUTIONS;
 
 const STATUS_LABEL: Record<string, string> = {
   NOT_STARTED: "Nie rozpoczęto",
@@ -43,6 +46,12 @@ export default function LiveLab() {
   const [stats, setStats] = useState<LivePoseStats | null>(null);
   const [cues, setCues] = useState<FeedbackItem[]>([]);
   const [report, setReport] = useState<TechniqueAnalysis | null>(null);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [deviceId, setDeviceId] = useState("");
+  const [resolution, setResolution] = useState<Resolution>("720");
+  const [mirror, setMirror] = useState(true);
+  const [camInfo, setCamInfo] = useState<string | null>(null);
+  const newTabUrl = useSyncExternalStore(noopSubscribe, embeddedUrl, () => null);
 
   const stopAll = useCallback(() => {
     sourceRef.current?.stop();
@@ -56,6 +65,10 @@ export default function LiveLab() {
 
   useEffect(() => {
     debugRef.current = new URLSearchParams(window.location.search).has("debug");
+    const refresh = () => listCameras().then(setCameras).catch(() => setCameras([]));
+    refresh();
+    navigator.mediaDevices?.addEventListener?.("devicechange", refresh);
+    return () => navigator.mediaDevices?.removeEventListener?.("devicechange", refresh);
   }, []);
 
   useEffect(() => {
@@ -72,15 +85,49 @@ export default function LiveLab() {
     return () => clearInterval(id);
   }, [phase]);
 
-  const start = async () => {
+  const openPreview = async (opts: { deviceId?: string; resolution?: Resolution; facing?: "user" | "environment" } = {}): Promise<OpenCamera | null> => {
+    const dev = opts.deviceId ?? deviceId;
+    const [width, height] = RESOLUTIONS[opts.resolution ?? resolution];
     setError(null);
+    setPhase("opening");
+    cameraRef.current?.stop();
+    cameraRef.current = null;
+    try {
+      const cam = await openCamera(videoRef.current!, { deviceId: dev || undefined, facing: opts.facing ?? facing, width, height, frameRate: 30 });
+      cameraRef.current = cam;
+      setCamInfo(`${cam.label || "Kamera"}: ${cam.width}x${cam.height}, ${Math.round(cam.frameRate)} kl./s`);
+      const list = await listCameras().catch(() => []);
+      setCameras(list);
+      if (list.some((c) => c.deviceId === cam.deviceId)) setDeviceId(cam.deviceId);
+      if (cam.facing === "environment") setMirror(false);
+      setPhase("preview");
+      return cam;
+    } catch (e) {
+      setError(describeCameraError(e).message);
+      setPhase("error");
+      return null;
+    }
+  };
+
+  const reopenIfPreviewing = (opts: Parameters<typeof openPreview>[0]) => {
+    if (phase === "preview" || phase === "error") void openPreview(opts);
+  };
+
+  const stopCamera = () => {
+    stopAll();
+    setCamInfo(null);
+    setPhase("idle");
+  };
+
+  const start = async () => {
     setReport(null);
     setCues([]);
+    const cam = cameraRef.current ?? (await openPreview());
+    if (!cam) return;
+    setError(null);
     setPhase("loading");
     try {
       const video = videoRef.current!;
-      const cam = await openCamera(video, { facing, width: 1280, height: 720, frameRate: 30 });
-      cameraRef.current = cam;
       const canvas = canvasRef.current!;
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
@@ -126,9 +173,10 @@ export default function LiveLab() {
       });
       setPhase("running");
     } catch (e) {
-      stopAll();
-      setError(e instanceof Error ? e.message : String(e));
-      setPhase("error");
+      sourceRef.current?.stop();
+      sourceRef.current = null;
+      setError(`Nie udało się uruchomić modelu pozy: ${e instanceof Error ? e.message : String(e)}`);
+      setPhase(cameraRef.current ? "preview" : "error");
     }
   };
 
@@ -143,7 +191,8 @@ export default function LiveLab() {
     setPhase("report");
   };
 
-  const mirrored = facing === "user";
+  const mirrored = mirror;
+  const locked = phase === "running" || phase === "loading" || phase === "opening";
   const cal = live?.calibration;
   const lastRep = live?.lastRepetition;
 
@@ -195,21 +244,32 @@ export default function LiveLab() {
                 )}
               </>
             )}
-            {phase !== "running" && phase !== "report" && (
+            {(phase === "idle" || phase === "opening" || phase === "error") && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
                 <p className="max-w-md text-slate-300">
                   Ustaw telefon lub laptop bokiem do siebie, około 2,5-4 m od miejsca ćwiczenia, na wysokości bioder. Cała sylwetka razem ze stopami musi być w kadrze.
                 </p>
-                {phase === "loading" && <p className="text-sm text-slate-400">Uruchamiam kamerę i model pozy...</p>}
+                {phase === "opening" && <p className="text-sm text-slate-400">Uruchamiam kamerę. Jeśli przeglądarka zapyta o dostęp, kliknij Zezwól.</p>}
               </div>
             )}
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {phase !== "running" ? (
-              <button onClick={start} disabled={phase === "loading"} className="flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">
-                <IconCamera /> {phase === "report" ? "Nowa seria" : "Start kamery"}
-              </button>
+              <>
+                <button onClick={start} disabled={phase === "loading" || phase === "opening"} className="flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">
+                  <IconCamera /> {phase === "report" ? "Nowa seria" : phase === "loading" ? "Ładuję model pozy..." : "Start analizy"}
+                </button>
+                {phase === "preview" ? (
+                  <button onClick={stopCamera} className="rounded-lg border border-slate-700 px-3 py-2 text-sm">Wyłącz kamerę</button>
+                ) : (
+                  phase !== "loading" && (
+                    <button onClick={() => void openPreview()} disabled={phase === "opening"} className="rounded-lg border border-slate-700 px-3 py-2 text-sm disabled:opacity-50" data-testid="camera-preview">
+                      Tylko podgląd kamery
+                    </button>
+                  )
+                )}
+              </>
             ) : (
               <button onClick={endSet} className="flex items-center gap-2 rounded-lg bg-rose-500 px-4 py-2 font-semibold text-slate-950">
                 <IconStop /> Zakończ serię i pokaż raport
@@ -218,15 +278,73 @@ export default function LiveLab() {
             <button onClick={() => setVoice((v) => !v)} className="flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm">
               {voice ? <IconVolume /> : <IconMute />} Głos {voice ? "włączony" : "wyłączony"}
             </button>
-            <select disabled={phase === "running" || phase === "loading"} value={facing} onChange={(e) => setFacing(e.target.value as "user" | "environment")} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm">
-              <option value="user">Kamera przednia</option>
-              <option value="environment">Kamera tylna</option>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="camera-settings">
+            {cameras.length > 0 ? (
+              <select
+                disabled={locked}
+                value={deviceId}
+                onChange={(e) => {
+                  setDeviceId(e.target.value);
+                  reopenIfPreviewing({ deviceId: e.target.value });
+                }}
+                className="max-w-xs rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+                data-testid="camera-device"
+              >
+                <option value="">Kamera domyślna</option>
+                {cameras.map((c, i) => (
+                  <option key={c.deviceId} value={c.deviceId}>
+                    {c.label || `Kamera ${i + 1}`}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                disabled={locked}
+                value={facing}
+                onChange={(e) => {
+                  const f = e.target.value as "user" | "environment";
+                  setFacing(f);
+                  setMirror(f === "user");
+                  reopenIfPreviewing({ facing: f });
+                }}
+                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+              >
+                <option value="user">Kamera przednia / internetowa</option>
+                <option value="environment">Kamera tylna</option>
+              </select>
+            )}
+            <select
+              disabled={locked}
+              value={resolution}
+              onChange={(e) => {
+                const r = e.target.value as Resolution;
+                setResolution(r);
+                reopenIfPreviewing({ resolution: r });
+              }}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+              data-testid="camera-resolution"
+            >
+              <option value="480">640x480 (słabszy komputer)</option>
+              <option value="720">1280x720 (zalecane)</option>
+              <option value="1080">1920x1080</option>
             </select>
-            <select disabled={phase === "running" || phase === "loading"} value={model} onChange={(e) => setModel(e.target.value as "lite" | "full")} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm">
+            <label className="flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm">
+              <input type="checkbox" checked={mirror} onChange={(e) => setMirror(e.target.checked)} /> Lustrzane odbicie
+            </label>
+            <select disabled={locked} value={model} onChange={(e) => setModel(e.target.value as "lite" | "full")} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm">
               <option value="full">Model dokładny (full)</option>
               <option value="lite">Model szybki (lite)</option>
             </select>
           </div>
+          {newTabUrl && (
+            <p className="mt-3 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-300">
+              Strona jest otwarta w osadzonym oknie, które może blokować kamerę.{" "}
+              <a href={newTabUrl} target="_blank" rel="noreferrer" className="font-semibold text-emerald-400 underline">
+                Otwórz w nowej karcie
+              </a>
+            </p>
+          )}
           {error && (
             <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-200">
               <IconAlert className="mt-0.5 shrink-0" /> {error}
@@ -265,6 +383,7 @@ export default function LiveLab() {
                 )}
               </Panel>
               <Panel title="Wydajność">
+                <Row k="Kamera" v={camInfo ?? "-"} />
                 <Row k="Model" v={stats ? `${model}, ${stats.delegate}, ${stats.mode === "worker" ? "Web Worker" : "wątek główny"}` : "-"} />
                 <Row k="Analizowane klatki" v={stats ? `${stats.processedFps} / s` : "-"} />
                 <Row k="Opóźnienie modelu" v={stats ? `${Math.round(stats.meanLatencyMs)} ms` : "-"} />
@@ -277,6 +396,9 @@ export default function LiveLab() {
     </main>
   );
 }
+
+const noopSubscribe = () => () => {};
+const embeddedUrl = () => (window.self !== window.top ? window.location.href : null);
 
 function cueColor(c: FeedbackItem): string {
   if (c.kind === "safety" || c.severity === "HIGH") return "bg-red-600 text-white";
