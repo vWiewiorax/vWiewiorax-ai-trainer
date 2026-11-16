@@ -54,6 +54,16 @@ Bez VS Code: `flutter run` w `apps/mobile`.
   npx tsx scripts/export-parity.ts
   ```
 
+## Test bez ćwiczenia: emulator z nagraniem jako kamerą
+Do sprawdzania kodu (nie skuteczności) emulator Androida może podawać plik wideo jako przednią kamerę.
+Aplikacja widzi go jak zwykłą kamerę: ten sam strumień, ML Kit i silnik co na telefonie.
+```
+& "$env:LOCALAPPDATA\Android\Sdk\emulator\emulator.exe" -list-avds
+& "$env:LOCALAPPDATA\Android\Sdk\emulator\emulator.exe" -avd <nazwa> -camera-front videofile:C:\nagrania\martwy.mp4
+```
+Potem w VS Code wybierz emulator jako urządzenie i F5. W aplikacji zostaw kamerę "Przednia".
+Wideo musi być w MP4 (H.264). Na emulatorze model działa wolniej niż na telefonie.
+
 ## Jak ustawić telefon
 - Martwy ciąg i przysiad: telefon z boku, na wysokości bioder, 2,5-4 m od Ciebie, cała sylwetka w kadrze.
 - Przednia kamera: widzisz ekran i podpowiedzi. Tylna kamera: lepszy obraz, ale słuchaj głosu.

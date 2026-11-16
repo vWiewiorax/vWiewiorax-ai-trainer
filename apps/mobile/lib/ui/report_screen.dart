@@ -66,7 +66,13 @@ class ReportScreen extends StatelessWidget {
             const Spacer(),
             Text('${(rep.durationMs / 1000).toStringAsFixed(1)} s'),
           ]),
-          if (issues.isEmpty) const Padding(padding: EdgeInsets.only(top: 6), child: Text('Bez uwag.')),
+          if (issues.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(rep.techniqueScore == null && !rep.incomplete
+                  ? 'Brak oceny: za mała pewność pomiaru (zasłonięte stawy albo zły kąt kamery).'
+                  : 'Bez uwag.'),
+            ),
           for (final e in issues)
             Padding(
               padding: const EdgeInsets.only(top: 6),
