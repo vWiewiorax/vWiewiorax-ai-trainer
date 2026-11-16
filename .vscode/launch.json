@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "AI Trainer (telefon, debug)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "apps/mobile",
+      "program": "lib/main.dart"
+    },
+    {
+      "name": "AI Trainer (telefon, profile - realna szybkość)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "apps/mobile",
+      "program": "lib/main.dart",
+      "flutterMode": "profile"
+    },
+    {
+      "name": "Testy silnika (trainer_engine)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "packages/trainer_engine",
+      "program": "test/"
+    }
+  ]
+}
