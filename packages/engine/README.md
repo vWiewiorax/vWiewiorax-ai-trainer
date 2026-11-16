@@ -93,5 +93,5 @@ features/registry.ts; no exercise-specific code is needed in the pipeline.
   (it cannot be told apart from standing up without the bar).
 - In the SYNTHETIC hip-rise sequences the hand proxy also triggers "bar away from body" (the stick
   figure has no bar; hands hang under the shoulders). On real lifts this rule needs checking first.
-- Only the conventional deadlift is implemented. Other exercises need definitions and validation.
+- Implemented: conventional deadlift, Romanian deadlift, barbell back squat. RDL and squat are verified only on SYNTHETIC sequences (test/topstart.test.ts); no real labelled video yet. Other exercises need definitions and validation.
 - Not a medical device: no injury diagnosis, no guarantee that a movement is safe.

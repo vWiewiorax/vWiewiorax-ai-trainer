@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import {
   ExerciseAnalyzer,
   buildReferenceModel,
+  EXERCISES,
   deadlift,
   type PoseFrame,
   type ReferenceModel,
@@ -14,6 +15,7 @@ import { extractPoseFromVideo, loadVideo } from "@trainer/engine/browser";
 import { IconCheck, IconDownload, IconRefresh } from "./icons";
 import Report from "./Report";
 import { REFERENCE_STORAGE_KEY } from "./referenceStorage";
+import { ExerciseSelect } from "./ExerciseSelect";
 
 
 type Phase = "idle" | "processing" | "done" | "error";
@@ -31,6 +33,8 @@ export default function VideoAnalysis() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const framesRef = useRef<PoseFrame[]>([]);
   const [phase, setPhase] = useState<Phase>("idle");
+  const [exerciseId, setExerciseId] = useState(deadlift.id);
+  const exercise = EXERCISES[exerciseId] ?? deadlift;
   const [fileName, setFileName] = useState("");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -62,10 +66,10 @@ export default function VideoAnalysis() {
         });
         const frames = await extractPoseFromVideo(video, estimator, { fps: 30, onProgress: (d, t) => setProgress(t ? d / t : 0) });
         framesRef.current = frames;
-        const analyzer = new ExerciseAnalyzer({ exercise: deadlift });
+        const analyzer = new ExerciseAnalyzer({ exercise });
         for (const f of frames) analyzer.processFrame(f);
         const r = analyzer.endSet();
-        const ref = buildReferenceModel(deadlift, r.repetitions, file.name);
+        const ref = buildReferenceModel(exercise, r.repetitions, file.name);
         setReport(r);
         setReference(ref);
         setPhase("done");
@@ -80,7 +84,7 @@ export default function VideoAnalysis() {
         URL.revokeObjectURL(url);
       }
     },
-    [model],
+    [model, exercise],
   );
 
   const saveReference = () => {
@@ -92,7 +96,8 @@ export default function VideoAnalysis() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 px-4 py-3 flex flex-wrap items-center gap-3">
-        <h1 className="text-lg font-semibold">Analiza nagrania - martwy ciąg klasyczny</h1>
+        <h1 className="text-lg font-semibold">Analiza nagrania - {exercise.name.toLowerCase()}</h1>
+        <ExerciseSelect value={exerciseId} onChange={setExerciseId} disabled={phase === "processing"} />
         <span className="text-xs text-slate-400">Ten sam model i silnik co analiza na żywo. Plik jest przetwarzany lokalnie w przeglądarce.</span>
       </header>
 

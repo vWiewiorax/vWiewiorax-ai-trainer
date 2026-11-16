@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BrowserSpeech, ExerciseAnalyzer, deadlift, type FeedbackItem, type LiveState, type ReferenceModel, type TechniqueAnalysis } from "@trainer/engine";
+import { BrowserSpeech, EXERCISES, ExerciseAnalyzer, deadlift, type FeedbackItem, type LiveState, type ReferenceModel, type TechniqueAnalysis } from "@trainer/engine";
 import { LivePoseSource, openCamera, type LivePoseStats, type OpenCamera } from "@trainer/engine/browser";
 import { drawOverlay } from "./overlay";
 import { IconAlert, IconCamera, IconMute, IconStop, IconVolume } from "./icons";
 import Report from "./Report";
 import { REFERENCE_STORAGE_KEY } from "./referenceStorage";
+import { ExerciseSelect } from "./ExerciseSelect";
 
 type Phase = "idle" | "loading" | "running" | "report" | "error";
 
@@ -32,6 +33,8 @@ export default function LiveLab() {
   const trailRef = useRef<{ x: number; y: number }[][]>([[], [], []]);
 
   const [phase, setPhase] = useState<Phase>("idle");
+  const [exerciseId, setExerciseId] = useState(deadlift.id);
+  const exercise = EXERCISES[exerciseId] ?? deadlift;
   const [error, setError] = useState<string | null>(null);
   const [facing, setFacing] = useState<"user" | "environment">("user");
   const [model, setModel] = useState<"lite" | "full">("full");
@@ -91,7 +94,7 @@ export default function LiveLab() {
       } catch {
         reference = null;
       }
-      analyzerRef.current = new ExerciseAnalyzer({ exercise: deadlift, reference });
+      analyzerRef.current = new ExerciseAnalyzer({ exercise, reference: reference?.exerciseId === exercise.id ? reference : null });
       trailRef.current = [[], [], []];
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       sourceRef.current = await LivePoseSource.start({
@@ -147,8 +150,10 @@ export default function LiveLab() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 px-4 py-3 flex flex-wrap items-center gap-3">
-        <h1 className="text-lg font-semibold">Analiza techniki na żywo - martwy ciąg klasyczny</h1>
+        <h1 className="text-lg font-semibold">Analiza techniki na żywo - {exercise.name.toLowerCase()}</h1>
+        <ExerciseSelect value={exerciseId} onChange={setExerciseId} disabled={phase === "running"} />
         <span className="text-xs text-slate-400">Kamera i model działają lokalnie w przeglądarce. Obraz nie jest nigdzie wysyłany.</span>
+        <p className="w-full text-xs text-slate-400" data-testid="camera-setup">{exercise.cameraSetup}</p>
       </header>
 
       <div className="grid gap-4 p-4 lg:grid-cols-[1fr_380px]">

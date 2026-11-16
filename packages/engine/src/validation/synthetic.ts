@@ -38,6 +38,8 @@ interface Angles {
   thigh: number;
   torso: number;
   torsoLen: number;
+  /** Heel lift as a fraction of body scale (squat heel-rise fault). */
+  heelLift?: number;
 }
 
 const STAND: Angles = { shin: 0, thigh: 2, torso: 1, torsoLen: 1 };
@@ -111,6 +113,81 @@ export function generateSyntheticDeadlift(opts: SyntheticDeadliftOptions): { fra
   return { frames, label: SYNTHETIC_LABEL, repWindows };
 }
 
+export type SyntheticTopStartFault = "none" | "shallow" | "fastDown" | "kneeBend" | "hipsFirst" | "incompleteTop" | "heelRise";
+
+export interface SyntheticTopStartOptions extends Omit<SyntheticDeadliftOptions, "fault" | "liftMs" | "lowerMs"> {
+  movement: "squat" | "romanian-deadlift";
+  fault?: SyntheticTopStartFault;
+  downMs?: number;
+  upMs?: number;
+}
+
+const BOTTOM: Record<SyntheticTopStartOptions["movement"], Angles> = {
+  squat: { shin: 32, thigh: 95, torso: 42, torsoLen: 1 },
+  "romanian-deadlift": { shin: 8, thigh: 18, torso: 80, torsoLen: 1 },
+};
+
+/**
+ * SYNTHETIC TEST DATA. Movements that start and end standing (squat, Romanian deadlift),
+ * rendered with the same stick figure as the deadlift generator. Not real-world evidence.
+ */
+export function generateSyntheticTopStart(opts: SyntheticTopStartOptions): { frames: PoseFrame[]; label: string; repWindows: [number, number][] } {
+  const fps = opts.fps ?? 30;
+  const dt = 1000 / fps;
+  const rnd = mulberry32(opts.seed ?? 1);
+  const noise = opts.noise ?? 0.002;
+  const frames: PoseFrame[] = [];
+  const repWindows: [number, number][] = [];
+  let t = 0;
+  const meta: CameraMetadata = { width: 1280, height: 720, mirrored: !!opts.mirrored, facing: "environment", rotation: 0 };
+  const ro = opts as SyntheticDeadliftOptions;
+  const emit = (a: Angles) => {
+    frames.push({ timestamp: Math.round(t), landmarks: render(a, ro, rnd, noise, meta, t), modelConfidence: 0.95, cameraMetadata: meta, source: "synthetic" });
+    t += dt;
+  };
+  const hold = (a: Angles, ms: number) => {
+    for (let k = 0; k < ms / dt; k++) emit(a);
+  };
+  const move = (from: Angles, to: Angles, ms: number, shape?: (p: number) => Angles) => {
+    const n = Math.max(2, Math.round(ms / dt));
+    for (let k = 1; k <= n; k++) emit(shape ? shape(k / n) : lerpA(from, to, smooth(k / n)));
+  };
+  const squat = opts.movement === "squat";
+  hold(STAND, 1600);
+  let top: Angles = STAND;
+  for (let r = 1; r <= opts.reps; r++) {
+    const faulty = opts.fault && opts.fault !== "none" && (!opts.faultReps || opts.faultReps.includes(r));
+    const f = faulty ? opts.fault! : "none";
+    let bottom = BOTTOM[opts.movement];
+    if (f === "shallow") bottom = squat ? { shin: 25, thigh: 60, torso: 28, torsoLen: 1 } : { shin: 5, thigh: 10, torso: 45, torsoLen: 1 };
+    if (f === "kneeBend") bottom = { shin: 22, thigh: 60, torso: 70, torsoLen: 1 };
+    if (f === "heelRise") bottom = { ...bottom, heelLift: 0.06 };
+    const nextTop = f === "incompleteTop" ? { shin: 6, thigh: 22, torso: 20, torsoLen: 1 } : STAND;
+    hold(top, 600);
+    const start = t;
+    move(top, bottom, f === "fastDown" ? 250 : opts.downMs ?? 1200);
+    hold(bottom, 300);
+    const upMs = opts.upMs ?? 1000;
+    if (f === "hipsFirst") {
+      const b = bottom;
+      move(b, nextTop, upMs, (p) => {
+        const legs = smooth(Math.min(1, p * 2.2));
+        const trunkP = smooth(Math.max(0, (p - 0.4) / 0.6));
+        const trunk = p < 0.4 ? b.torso + 20 * smooth(p / 0.4) : b.torso + 20 - (b.torso + 20 - nextTop.torso) * trunkP;
+        return { shin: lerp(b.shin, nextTop.shin, legs), thigh: lerp(b.thigh, nextTop.thigh, legs), torso: trunk, torsoLen: 1 };
+      });
+    } else {
+      move(bottom, nextTop, upMs);
+    }
+    repWindows.push([start, t]);
+    top = nextTop;
+  }
+  hold(top, 600);
+  move(top, STAND, 600);
+  hold(STAND, 800);
+  return { frames, label: SYNTHETIC_LABEL, repWindows };
+}
+
 function render(a: Angles, o: SyntheticDeadliftOptions, rnd: () => number, noise: number, meta: CameraMetadata, t: number): LandmarkSet {
   const s = o.scale ?? 0.8;
   const f = o.facing ?? 1;
@@ -126,7 +203,7 @@ function render(a: Angles, o: SyntheticDeadliftOptions, rnd: () => number, noise
   const elbow = { x: sh.x, y: sh.y + L.arm * 0.52 };
   const ear = { x: sh.x + f * 0.2 * L.head * Math.sin(a.torso * rad), y: sh.y - L.head * Math.cos(a.torso * rad) * 0.8 };
   const nose = { x: ear.x + f * 0.07 * s, y: ear.y + 0.01 };
-  const heel = { x: ankle.x - f * 0.05 * s, y: ankle.y + 0.02 * s };
+  const heel = { x: ankle.x - f * 0.05 * s, y: ankle.y + 0.02 * s - (a.heelLift ?? 0) * s };
   const toe = { x: ankle.x + f * (L.foot - 0.05 * s), y: ankle.y + 0.03 * s };
   // Near side = left when facing +x; the far side is offset slightly with lower visibility.
   const near = f === 1 ? "left" : "right";
@@ -165,6 +242,7 @@ const lerpA = (a: Angles, b: Angles, p: number): Angles => ({
   thigh: lerp(a.thigh, b.thigh, p),
   torso: lerp(a.torso, b.torso, p),
   torsoLen: lerp(a.torsoLen, b.torsoLen, p),
+  heelLift: lerp(a.heelLift ?? 0, b.heelLift ?? 0, p),
 });
 const smooth = (p: number) => p * p * (3 - 2 * p);
 

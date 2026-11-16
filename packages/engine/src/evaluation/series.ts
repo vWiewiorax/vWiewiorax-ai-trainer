@@ -19,6 +19,12 @@ export function selectSpan(
     if (!rep) return null;
     start = rep.start;
     end = rep.end;
+  } else if (phase === "return") {
+    // Trailing return to the start position (top of a squat / RDL), never the setup span.
+    const last = phases[phases.length - 1];
+    if (phases.length < 2 || !last || last.id !== phases[0]?.id) return null;
+    start = last.startTimestamp;
+    end = last.endTimestamp;
   } else {
     // The leading span is the setup; the trailing return to start shares its id but is not the setup.
     const spans = phases[0]?.id === phase ? [phases[0]] : phases.filter((p) => p.id === phase);

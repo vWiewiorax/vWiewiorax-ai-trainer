@@ -325,6 +325,17 @@ export const FEATURES: Record<string, FeatureSpec> = {
       return { value: (ctx.facing * (p[0]!.x - p[1]!.x)) / len.shin, confidence: conf(p) };
     },
   },
+  heelLift: {
+    group: "alignment",
+    unit: "body",
+    description: "Wysokość pięty względem palców stopy / długość goleni (widok z boku, rośnie gdy pięta się odrywa)",
+    compute: (ctx) => {
+      const p = pts(ctx, [L(ctx.nearSide, "Heel"), L(ctx.nearSide, "FootIndex")]);
+      const len = lengths(ctx);
+      if (!p || !len) return null;
+      return { value: (p[1]!.y - p[0]!.y) / len.shin, confidence: conf(p) };
+    },
+  },
   hipBelowKnee: {
     group: "alignment",
     unit: "body",
