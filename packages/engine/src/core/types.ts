@@ -33,6 +33,8 @@ export interface CameraMetadata {
   rotation: 0 | 90 | 180 | 270;
   /** Mean image luminance 0..1 when the frame processor measured it. */
   brightness?: number;
+  /** Set by the frame processor when the image changed abruptly (edit / cut in recorded video). */
+  sceneCut?: boolean;
 }
 
 export interface PoseFrame {

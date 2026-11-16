@@ -7,14 +7,32 @@
     "exercise": "conventional-deadlift",
     "variation": "barbell",
     "cameraView": "side",
-    "conditions": ["rendered model", "plates occlude near shin", "starts standing away from the bar", "two short fades to black"],
+    "conditions": [
+      "rendered model",
+      "plates occlude near shin",
+      "starts standing away from the bar",
+      "two short fades to black"
+    ],
     "expectedRepCount": 1,
-    "repetitions": [{ "start": 11500, "end": 21500, "complete": true }],
+    "repetitions": [
+      {
+        "start": 11500,
+        "end": 21500,
+        "complete": true
+      }
+    ],
     "visibleLandmarks": "Near-side knee/ankle partly hidden by the plate at setup; far side mostly occluded.",
     "errors": [],
     "annotator": "Devin (non-expert, labelled from a 1 fps storyboard)",
     "annotationConfidence": 0.5,
-    "notes": "A second lift starts at ~28 s and is cut off before lowering, so only one complete repetition. No technique labels: an expert has not reviewed the clip."
+    "notes": "A second lift starts at ~28 s and is cut off before lowering, so only one complete repetition. No technique labels: an expert has not reviewed the clip.",
+    "errorsAnnotated": false,
+    "sceneCutsMs": [
+      21960,
+      22960,
+      25760,
+      26760
+    ]
   },
   {
     "id": "deadlift_demo",
@@ -24,13 +42,18 @@
     "exercise": "conventional-deadlift",
     "variation": "barbell",
     "cameraView": "mixed",
-    "conditions": ["rear-oblique view", "edited cuts", "text overlays"],
+    "conditions": [
+      "rear-oblique view",
+      "edited cuts",
+      "text overlays"
+    ],
     "expectedRepCount": 1,
     "errors": [],
     "expectUnscorable": true,
     "annotator": "Devin (non-expert, labelled from a storyboard)",
     "annotationConfidence": 0.4,
-    "notes": "Not a supported camera setup. The useful check is that the engine does not produce a confident technique score."
+    "notes": "Not a supported camera setup. The useful check is that the engine does not produce a confident technique score.",
+    "errorsAnnotated": false
   },
   {
     "id": "acft_deadlift",
@@ -40,12 +63,24 @@
     "exercise": "conventional-deadlift",
     "variation": "trap bar (hex bar) - a different exercise from the conventional barbell deadlift",
     "cameraView": "mixed",
-    "conditions": ["trap bar", "multiple people in frame", "edited cuts", "outdoor lighting"],
+    "conditions": [
+      "trap bar",
+      "multiple people in frame",
+      "edited cuts",
+      "outdoor lighting"
+    ],
     "expectedRepCount": 0,
     "errors": [],
     "expectUnscorable": true,
     "annotator": "Devin (non-expert, labelled from a storyboard)",
     "annotationConfidence": 0.3,
-    "notes": "Robustness clip only. Repetitions across cuts and different people must not be stitched into a confident set report; expectedRepCount 0 means no trustworthy set should be counted."
+    "notes": "Robustness clip only. Repetitions across cuts and different people must not be stitched into a confident set report; expectedRepCount 0 means no trustworthy set should be counted.",
+    "errorsAnnotated": false,
+    "sceneCutsMs": [
+      7288,
+      13627,
+      23704,
+      68282
+    ]
   }
 ]

@@ -20,6 +20,7 @@ import type {
 import { ENGINE_VERSION } from "../core/version";
 import { CalibrationMonitor, requiredFor, type CalibrationOptions, type CalibrationState } from "../camera/calibration";
 import { bodyBox, normalizeLandmarks } from "../camera/normalize";
+import { ContinuityMonitor } from "../camera/continuity";
 import { ViewTracker } from "../camera/view";
 import { evaluateRepetition, evaluateRule, type RepContext, type RuleOutcome, type RuleOverrides } from "../evaluation/rules";
 import { FeatureExtractor } from "../features/extractor";
@@ -106,6 +107,7 @@ export class ExerciseAnalyzer {
   private readonly calibration: CalibrationMonitor;
   private readonly extractor: FeatureExtractor;
   private readonly detector: RepetitionDetector;
+  private readonly continuity = new ContinuityMonitor();
   private readonly feedback: FeedbackEngine;
   private readonly recognizer: RuleBasedRecognizer;
   private readonly overrides: RuleOverrides;
@@ -172,6 +174,9 @@ export class ExerciseAnalyzer {
     if (frame.cameraMetadata.brightness !== undefined) pushCapped(this.brightness, frame.cameraMetadata.brightness);
 
     const norm = normalizeLandmarks(frame);
+    const moved = this.continuity.update(norm.points, ts);
+    const cut = frame.cameraMetadata.sceneCut ? "jump" : moved;
+    if (cut !== "none") this.handleDiscontinuity(cut, ts);
     const box = bodyBox(norm.points, 0.5);
     const filtered = this.filter.apply(norm.points, ts, box?.height ?? 0.6);
     const nframe: NormalizedFrame = {
@@ -275,6 +280,23 @@ export class ExerciseAnalyzer {
     const open = this.detector.flush(this.lastTs);
     if (open) this.finishRepetition(open, this.dominantView(), 0.8);
     return this.buildReport();
+  }
+
+  private handleDiscontinuity(kind: "gap" | "jump", ts: number): void {
+    const hadCycle = this.detector.snapshot(ts) !== null;
+    this.detector.abort();
+    this.lastPhase = null;
+    if (kind === "jump") {
+      this.filter.reset();
+      this.view.reset();
+      this.calibration.start();
+      this.wasReady = false;
+    }
+    const msg = kind === "jump" ? MESSAGES.calibration.sceneChange : hadCycle ? MESSAGES.calibration.repInterrupted : null;
+    if (msg) {
+      this.feedback.offerSystem("setup", msg, ts, { voice: msg, key: `cut:${kind}`, priority: 4 });
+      this.issues.set(msg, (this.issues.get(msg) ?? 0) + 1);
+    }
   }
 
   private completeCount(): number {

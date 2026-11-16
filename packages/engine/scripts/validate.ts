@@ -12,6 +12,7 @@ import {
   deadlift,
   generateSyntheticDeadlift,
   runSequence,
+  applySceneCuts,
   SYNTHETIC_LABEL,
   type DatasetAnnotation,
   type DeadliftFault,
@@ -31,7 +32,7 @@ for (const ann of annotations) {
     continue;
   }
   const { frames } = JSON.parse(readFileSync(file, "utf8")) as { frames: PoseFrame[] };
-  real.push(compareToAnnotation(runSequence(frames, { exercise: deadlift }), ann));
+  real.push(compareToAnnotation(runSequence(applySceneCuts(frames, ann.sceneCutsMs), { exercise: deadlift }), ann));
 }
 
 const FAULTS: [DeadliftFault, string[]][] = [

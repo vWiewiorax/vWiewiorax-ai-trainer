@@ -49,6 +49,8 @@ export const MESSAGES = {
     calibrating: "Kalibracja... nie ruszaj się.",
     ready: "Gotowe. Możesz zaczynać.",
     lost: "Straciłem Cię z kadru. Analiza wstrzymana.",
+    sceneChange: "Zmieniło się ujęcie albo osoba w kadrze. Kalibruję od nowa.",
+    repInterrupted: "Przerwa w obrazie. To powtórzenie nie zostanie ocenione.",
   },
   safety: {
     stopSet: "Zatrzymaj serię i odpocznij. Wykryłem wyraźną utratę kontroli ruchu.",

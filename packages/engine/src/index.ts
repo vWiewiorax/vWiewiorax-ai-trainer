@@ -9,6 +9,8 @@ export * from "./filtering/landmarkFilter";
 export * from "./camera/normalize";
 export * from "./camera/view";
 export * from "./camera/calibration";
+export * from "./camera/continuity";
+export * from "./camera/sceneCut";
 export * from "./features/body";
 export * from "./features/registry";
 export * from "./features/kinematics";

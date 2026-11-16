@@ -24,6 +24,10 @@ export interface DatasetAnnotation {
   errors: { type: string; rep?: number; severity?: Severity; annotatorConfidence: number }[];
   /** Whether the engine is expected to refuse scoring (wrong view, multiple people, cuts, ...). */
   expectUnscorable?: boolean;
+  /** False when nobody labeled technique errors; detected errors are then listed but not scored as FP/FN. */
+  errorsAnnotated?: boolean;
+  /** Edit points (ms) in the source media, measured offline (ffmpeg scene filter) for stored landmark files. */
+  sceneCutsMs?: number[];
   annotator: string;
   /** 0..1, how much the label itself can be trusted (non-expert / low frame rate labels are low). */
   annotationConfidence: number;
@@ -48,6 +52,16 @@ export interface SequenceResult {
   scoredWhenUnscorable: boolean;
 }
 
+/** Marks the first frame at or after each known edit point, as the video frame processor would. */
+export function applySceneCuts(frames: readonly PoseFrame[], cutsMs: readonly number[] = []): PoseFrame[] {
+  const marked = new Set<number>();
+  for (const c of cutsMs) {
+    const i = frames.findIndex((f) => f.timestamp >= c);
+    if (i >= 0) marked.add(i);
+  }
+  return frames.map((f, i) => (marked.has(i) ? { ...f, cameraMetadata: { ...f.cameraMetadata, sceneCut: true } } : f));
+}
+
 export function runSequence(frames: readonly PoseFrame[], cfg: AnalyzerConfig): TechniqueAnalysis {
   const analyzer = new ExerciseAnalyzer(cfg);
   for (const f of frames) analyzer.processFrame(f);
@@ -58,6 +72,7 @@ export function runSequence(frames: readonly PoseFrame[], cfg: AnalyzerConfig): 
 export function compareToAnnotation(report: TechniqueAnalysis, ann: DatasetAnnotation): SequenceResult {
   const expected = [...new Set(ann.errors.filter((e) => e.annotatorConfidence >= 0.5).map((e) => e.type))];
   const detected = [...new Set(report.detectedErrors.map((e) => e.type))];
+  const labeled = ann.errorsAnnotated !== false;
   return {
     id: ann.id,
     kind: ann.kind,
@@ -66,9 +81,9 @@ export function compareToAnnotation(report: TechniqueAnalysis, ann: DatasetAnnot
     repCountError: report.repetitionCount - ann.expectedRepCount,
     expectedErrors: expected,
     detectedErrors: detected,
-    truePositives: detected.filter((d) => expected.includes(d)),
-    falsePositives: detected.filter((d) => !expected.includes(d)),
-    falseNegatives: expected.filter((e) => !detected.includes(e)),
+    truePositives: labeled ? detected.filter((d) => expected.includes(d)) : [],
+    falsePositives: labeled ? detected.filter((d) => !expected.includes(d)) : [],
+    falseNegatives: labeled ? expected.filter((e) => !detected.includes(e)) : [],
     averageScore: report.averageTechniqueScore,
     analysisConfidence: report.analysisConfidence,
     usableFrameRatio: report.cameraQuality.usableFrameRatio,

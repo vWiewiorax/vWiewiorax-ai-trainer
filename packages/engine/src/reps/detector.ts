@@ -83,6 +83,15 @@ export class RepetitionDetector {
     this.lastValidT = null;
   }
 
+  /** Drops the open cycle (scene cut, person change, long gap); completed repetitions are kept. */
+  abort(): void {
+    if (this.cycle?.counted) this.count--;
+    this.cycle = null;
+    this.state = null;
+    this.extreme = null;
+    this.lastValidT = null;
+  }
+
   update(t: number, m: Measurement | null): DetectorUpdate {
     const dt = this.lastT === null ? 0 : t - this.lastT;
     this.lastT = t;

@@ -20,10 +20,11 @@ export function selectSpan(
     start = rep.start;
     end = rep.end;
   } else {
-    // Use the first occurrence of the phase (setup) or the longest one for repeated phases.
-    const spans = phases.filter((p) => p.id === phase);
+    // The leading span is the setup; the trailing return to start shares its id but is not the setup.
+    const spans = phases[0]?.id === phase ? [phases[0]] : phases.filter((p) => p.id === phase);
     if (spans.length === 0) return null;
     const s = spans.reduce((a, b) => (b.endTimestamp - b.startTimestamp > a.endTimestamp - a.startTimestamp ? b : a));
+    if (spans[0] === phases[0] && s.endTimestamp <= s.startTimestamp) return null;
     start = s.startTimestamp;
     end = s.endTimestamp;
   }
