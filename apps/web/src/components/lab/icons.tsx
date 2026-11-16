@@ -26,3 +26,6 @@ export const IconDownload = (p: SVGProps<SVGSVGElement>) => (
 export const IconRefresh = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base} {...p}><polyline points="23 4 23 10 17 10" /><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10" /></svg>
 );
+export const IconExpand = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base} {...p}><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
+);

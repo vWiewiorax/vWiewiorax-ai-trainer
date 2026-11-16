@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { BrowserSpeech, EXERCISES, ExerciseAnalyzer, deadlift, type FeedbackItem, type LiveState, type ReferenceModel, type TechniqueAnalysis } from "@trainer/engine";
 import { LivePoseSource, describeCameraError, listCameras, openCamera, type LivePoseStats, type OpenCamera } from "@trainer/engine/browser";
 import { drawOverlay } from "./overlay";
-import { IconAlert, IconCamera, IconMute, IconStop, IconVolume } from "./icons";
+import { IconAlert, IconCamera, IconExpand, IconMute, IconStop, IconVolume } from "./icons";
 import Report from "./Report";
 import { REFERENCE_STORAGE_KEY } from "./referenceStorage";
 import { ExerciseSelect } from "./ExerciseSelect";
@@ -34,6 +34,8 @@ export default function LiveLab() {
   const debugRef = useRef(false);
   const latestRef = useRef<LiveState | null>(null);
   const trailRef = useRef<{ x: number; y: number }[][]>([[], [], []]);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const heldRef = useRef<{ item: FeedbackItem; until: number } | null>(null);
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [exerciseId, setExerciseId] = useState(deadlift.id);
@@ -51,6 +53,8 @@ export default function LiveLab() {
   const [resolution, setResolution] = useState<Resolution>("720");
   const [mirror, setMirror] = useState(true);
   const [camInfo, setCamInfo] = useState<string | null>(null);
+  const [far, setFar] = useState(false);
+  const [heldCue, setHeldCue] = useState<FeedbackItem | null>(null);
   const newTabUrl = useSyncExternalStore(noopSubscribe, embeddedUrl, () => null);
 
   const stopAll = useCallback(() => {
@@ -81,9 +85,42 @@ export default function LiveLab() {
     const id = setInterval(() => {
       setLive(latestRef.current);
       if (sourceRef.current) setStats(sourceRef.current.currentStats);
+      const h = heldRef.current;
+      setHeldCue(h && performance.now() < h.until ? h.item : null);
     }, 100);
     return () => clearInterval(id);
   }, [phase]);
+
+  // Keep the screen on while analysing (phones dim after ~30 s without touch).
+  useEffect(() => {
+    if (phase !== "running" || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let cancelled = false;
+    navigator.wakeLock.request("screen").then((l) => (cancelled ? void l.release() : (lock = l)), () => {});
+    return () => {
+      cancelled = true;
+      void lock?.release();
+    };
+  }, [phase]);
+
+  useEffect(() => {
+    const onChange = () => {
+      if (!document.fullscreenElement) setFar(false);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggleFar = () => {
+    if (far) {
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+      setFar(false);
+      return;
+    }
+    setFar(true);
+    // iOS Safari has no element fullscreen; the fixed full-viewport layout is the fallback.
+    void stageRef.current?.requestFullscreen?.().catch(() => {});
+  };
 
   const openPreview = async (opts: { deviceId?: string; resolution?: Resolution; facing?: "user" | "environment" } = {}): Promise<OpenCamera | null> => {
     const dev = opts.deviceId ?? deviceId;
@@ -166,6 +203,7 @@ export default function LiveLab() {
           if (s.feedback) {
             const item = s.feedback;
             if (item.voice) speechRef.current?.speak(item.voice, { interrupt: item.kind === "safety" });
+            if (item.kind !== "rep") heldRef.current = { item, until: performance.now() + 5000 };
             if (item.kind !== "rep") setCues((c) => (c[0]?.text === item.text ? c : [item, ...c.filter((x) => x.text !== item.text)].slice(0, 6)));
           }
         },
@@ -183,6 +221,8 @@ export default function LiveLab() {
   const endSet = () => {
     const analyzer = analyzerRef.current;
     stopAll();
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    setFar(false);
     if (analyzer) {
       const r = analyzer.endSet();
       if (debugRef.current) (window as unknown as { __trainerReport?: unknown }).__trainerReport = r;
@@ -195,6 +235,10 @@ export default function LiveLab() {
   const locked = phase === "running" || phase === "loading" || phase === "opening";
   const cal = live?.calibration;
   const lastRep = live?.lastRepetition;
+  const bigCue = live?.visualCues[0] ?? heldCue;
+  const t = far
+    ? { box: "rounded-2xl bg-black/75 px-[2.5vmin] py-[1.5vmin]", reps: "text-[16vmin] portrait:text-[24vmin] leading-none", small: "text-[2.6vmin]", score: "text-[11vmin] portrait:text-[16vmin] leading-none", cue: "text-[6vmin] portrait:text-[9vmin] leading-tight px-[3vmin] py-[2.5vmin]", title: "text-[5vmin]", body: "text-[3.6vmin]", inset: "inset-x-[2vmin] bottom-[2vmin]" }
+    : { box: "rounded-lg bg-black/70 px-3 py-2", reps: "text-4xl", small: "text-xs", score: "text-3xl", cue: "text-lg px-4 py-3", title: "", body: "text-sm", inset: "inset-x-3 bottom-3" };
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
@@ -207,26 +251,29 @@ export default function LiveLab() {
 
       <div className="grid gap-4 p-4 lg:grid-cols-[1fr_380px]">
         <section>
-          <div className="relative w-full overflow-hidden rounded-xl bg-black aspect-video">
+          <div ref={stageRef} className={far ? "fixed inset-0 z-50 overflow-hidden bg-black" : "relative w-full overflow-hidden rounded-xl bg-black aspect-video"} data-testid="stage">
             <div className="absolute inset-0" style={{ transform: mirrored ? "scaleX(-1)" : undefined }}>
               <video ref={videoRef} className="h-full w-full object-contain" playsInline muted />
               <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full object-contain" />
             </div>
             {phase === "running" && live && (
               <>
-                <div className="absolute left-3 top-3 rounded-lg bg-black/70 px-3 py-2">
-                  <div className="text-4xl font-bold tabular-nums">{live.repCount}</div>
-                  <div className="text-xs text-slate-300">powtórzenia{live.partialReps ? ` (+${live.partialReps} niepełne)` : ""}</div>
+                <div className={`absolute left-3 top-3 ${t.box}`}>
+                  <div className={`${t.reps} font-bold tabular-nums`}>{live.repCount}</div>
+                  <div className={`${t.small} text-slate-300`}>powtórzenia{live.partialReps ? ` (+${live.partialReps} niepełne)` : ""}</div>
                 </div>
-                <div className="absolute right-3 top-3 rounded-lg bg-black/70 px-3 py-2 text-right">
-                  <div className="text-xs text-slate-300">Ostatnie powtórzenie</div>
-                  <div className="text-3xl font-bold tabular-nums">{lastRep?.techniqueScore ?? "-"}</div>
-                  <div className="text-xs text-slate-400">pewność analizy {lastRep ? Math.round(lastRep.analysisConfidence * 100) + "%" : "-"}</div>
+                <div className={`absolute right-3 top-3 text-right ${t.box}`}>
+                  <div className={`${t.small} text-slate-300`}>Ostatnie powtórzenie</div>
+                  <div className={`${t.score} font-bold tabular-nums`}>{lastRep?.techniqueScore ?? "-"}</div>
+                  <div className={`${t.small} text-slate-400`}>pewność analizy {lastRep ? Math.round(lastRep.analysisConfidence * 100) + "%" : "-"}</div>
                 </div>
+                {far && live.phaseLabel && (
+                  <div className={`absolute left-1/2 top-3 -translate-x-1/2 whitespace-nowrap portrait:top-[40vmin] ${t.box} ${t.title} font-semibold`}>{live.phaseLabel}</div>
+                )}
                 {live.status !== "analysing" && cal && (
-                  <div className="absolute inset-x-3 bottom-3 rounded-lg bg-amber-500/90 px-4 py-3 text-slate-950">
-                    <div className="font-semibold">{STATUS_LABEL[cal.status] ?? cal.status}</div>
-                    <div className="text-sm">{cal.guidance[0] ?? "Ustaw się tak, aby była widoczna cała sylwetka."}</div>
+                  <div className={`absolute ${t.inset} rounded-lg bg-amber-500/90 px-4 py-3 text-slate-950`}>
+                    <div className={`font-semibold ${t.title}`}>{STATUS_LABEL[cal.status] ?? cal.status}</div>
+                    <div className={t.body}>{cal.guidance[0] ?? "Ustaw się tak, aby była widoczna cała sylwetka."}</div>
                     {cal.status === "CALIBRATING" && (
                       <div className="mt-2 h-1.5 w-full rounded bg-slate-950/20">
                         <div className="h-1.5 rounded bg-slate-950" style={{ width: `${Math.round(cal.progress * 100)}%` }} />
@@ -234,15 +281,26 @@ export default function LiveLab() {
                     )}
                   </div>
                 )}
-                {live.status === "analysing" && live.visualCues[0] && (
-                  <div className={`absolute inset-x-3 bottom-3 rounded-lg px-4 py-3 text-lg font-semibold ${cueColor(live.visualCues[0])}`}>{live.visualCues[0].text}</div>
+                {live.status === "analysing" && bigCue && (
+                  <div className={`absolute ${t.inset} rounded-lg font-semibold ${t.cue} ${cueColor(bigCue)}`} data-testid="big-cue">{bigCue.text}</div>
                 )}
                 {live.stopSetRecommended && (
-                  <div className="absolute inset-x-3 top-24 flex items-center gap-2 rounded-lg bg-red-600 px-4 py-3 font-semibold">
+                  <div className={`absolute inset-x-3 ${far ? "top-[40vmin] text-[5vmin]" : "top-24"} flex items-center gap-2 rounded-lg bg-red-600 px-4 py-3 font-semibold`}>
                     <IconAlert /> Zatrzymaj serię i odpocznij.
                   </div>
                 )}
               </>
+            )}
+            {far && (
+              <div className={`absolute right-[2vmin] z-10 flex gap-2 opacity-70 hover:opacity-100 ${phase === "running" ? "top-[27vmin] portrait:top-[56vmin]" : "bottom-[2vmin]"}`}>
+                {phase === "preview" && (
+                  <button onClick={start} className="rounded-lg bg-emerald-500 px-4 py-2 font-semibold text-slate-950">Start analizy</button>
+                )}
+                {phase === "running" && (
+                  <button onClick={endSet} className="rounded-lg bg-rose-500 px-4 py-2 font-semibold text-slate-950">Zakończ serię</button>
+                )}
+                <button onClick={toggleFar} className="rounded-lg bg-slate-800 px-4 py-2 text-sm">Zamknij pełny ekran</button>
+              </div>
             )}
             {(phase === "idle" || phase === "opening" || phase === "error") && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
@@ -273,6 +331,11 @@ export default function LiveLab() {
             ) : (
               <button onClick={endSet} className="flex items-center gap-2 rounded-lg bg-rose-500 px-4 py-2 font-semibold text-slate-950">
                 <IconStop /> Zakończ serię i pokaż raport
+              </button>
+            )}
+            {(phase === "preview" || phase === "running" || phase === "loading") && (
+              <button onClick={toggleFar} className="flex items-center gap-2 rounded-lg border border-emerald-500/60 px-3 py-2 text-sm text-emerald-300" data-testid="far-mode">
+                <IconExpand /> Tryb z daleka (pełny ekran)
               </button>
             )}
             <button onClick={() => setVoice((v) => !v)} className="flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm">

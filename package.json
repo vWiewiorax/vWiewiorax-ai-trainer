@@ -9,6 +9,7 @@
     "dev": "npm run dev -w web",
     "build": "npm run build -w web",
     "start": "npm run start -w web",
+    "phone": "npm run phone -w web",
     "lint": "npm run lint -w web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present"
