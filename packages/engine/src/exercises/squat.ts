@@ -210,6 +210,11 @@ export const backSquat: ExerciseDefinition = {
     { feature: "trunkInclination", stat: "max", max: 65, weight: 1.5 },
     { feature: "wristToShoulderDistance", stat: "mean", max: 0.8, weight: 1 },
   ],
+  liveChecks: [
+    { rule: "KNEE_VALGUS", phases: ["DESCENDING", "BOTTOM", "ASCENDING"], persistMs: 250 },
+    { rule: "EXCESSIVE_FORWARD_LEAN", phases: ["BOTTOM", "ASCENDING"], persistMs: 300 },
+    { rule: "LATERAL_SHIFT", phases: ["ASCENDING"], persistMs: 300 },
+  ],
   comparisonFeatures: ["hipAngle", "kneeAngle", "trunkInclination", "hipHeight"],
   keyCheckpoints: [
     "Stopy stabilnie na podłodze, ciężar na środku stopy.",

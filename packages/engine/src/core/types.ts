@@ -258,6 +258,19 @@ export interface LiveCondition {
   bands: [number, number];
 }
 
+/**
+ * Instant check of a "stat" rule (min/max with a comparator) on every frame,
+ * so a clear deviation is reported while it happens instead of after the rep.
+ * Feature, comparator and threshold (incl. trainer overrides) come from the rule.
+ */
+export interface LiveCheck {
+  rule: string;
+  /** Phases in which the check is active. */
+  phases: string[];
+  /** Deviation must hold this long before it is reported (ms). */
+  persistMs: number;
+}
+
 export interface ErrorDefinition {
   /** Stable error type, e.g. HIP_RISE_TOO_EARLY. */
   type: string;
@@ -319,6 +332,8 @@ export interface ExerciseDefinition {
   recognition: RecognitionPredicate[];
   /** Features compared against a trainer reference movement. */
   comparisonFeatures: string[];
+  /** Instant in-movement checks surfaced while the repetition is still running. */
+  liveChecks?: LiveCheck[];
   keyCheckpoints: string[];
 }
 

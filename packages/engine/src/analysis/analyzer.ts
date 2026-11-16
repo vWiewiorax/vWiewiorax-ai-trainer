@@ -22,7 +22,7 @@ import { CalibrationMonitor, requiredFor, type CalibrationOptions, type Calibrat
 import { bodyBox, normalizeLandmarks } from "../camera/normalize";
 import { ContinuityMonitor } from "../camera/continuity";
 import { ViewTracker } from "../camera/view";
-import { evaluateRepetition, evaluateRule, type RepContext, type RuleOutcome, type RuleOverrides } from "../evaluation/rules";
+import { evaluateRepetition, evaluateRule, severityFromBands, type RepContext, type RuleOutcome, type RuleOverrides } from "../evaluation/rules";
 import { FeatureExtractor } from "../features/extractor";
 import { FEATURES } from "../features/registry";
 import { FeedbackEngine, type FeedbackItem, type FeedbackOptions } from "../feedback/engine";
@@ -121,6 +121,7 @@ export class ExerciseAnalyzer {
   private comparisons: ReferenceComparison[] = [];
   private provisional = new Map<string, TechniqueError>();
   private offered = new Set<string>();
+  private liveSince = new Map<string, number>();
   private lastPhase: string | null = null;
   private lastStatus: AnalyzerStatus = "no-person";
   private lastGuidance: string | null = null;
@@ -227,6 +228,7 @@ export class ExerciseAnalyzer {
       const update = this.detector.update(ts, bf.features[this.exercise.repetition.signal] ?? null);
       phase = update.phase;
       inRep = update.inRep;
+      this.checkLive(bf, phase, ts, view.view, view.confidence);
       if (phase !== this.lastPhase && this.lastPhase !== null && update.inRep) {
         this.evaluateEndedPhase(this.lastPhase, ts, view.view, view.confidence);
       }
@@ -338,6 +340,51 @@ export class ExerciseAnalyzer {
     }
   }
 
+  private checkLive(bf: BiomechanicalFrame, phase: string | null, ts: number, view: CameraView, viewConfidence: number): void {
+    const def = this.exercise;
+    for (const chk of def.liveChecks ?? []) {
+      const rule = def.evaluationRules.find((r) => r.type === chk.rule);
+      const c = rule?.condition;
+      if (!rule || !c || c.kind !== "stat" || !rule.views.includes(view)) continue;
+      if (this.overrides.disabled.has(rule.type) && !rule.safetyCritical) continue;
+      const f = bf.features[c.feature];
+      const thr = this.overrides.thresholds[rule.type] ?? c.threshold;
+      const confidence = f ? f.confidence * rule.reliability * (0.6 + 0.4 * viewConfidence) : 0;
+      const deviation = f ? (c.compare === ">" ? f.value - thr : thr - f.value) : 0;
+      const bad = !!f && phase !== null && chk.phases.includes(phase) && confidence >= rule.minConfidence && deviation > 0;
+      if (!bad) {
+        this.liveSince.delete(rule.type);
+        continue;
+      }
+      const since = this.liveSince.get(rule.type) ?? ts;
+      this.liveSince.set(rule.type, since);
+      if (ts - since < chk.persistMs) continue;
+      const repIndex = this.repetitions.length + 1;
+      const id = `${def.id}-${repIndex}-${rule.type}`;
+      if (this.offered.has(id)) continue;
+      this.offered.add(id);
+      const err: TechniqueError = {
+        id,
+        type: rule.type,
+        exercise: def.id,
+        phase: phase!,
+        severity: severityFromBands(deviation, c.bands),
+        confidence: round(confidence, 2),
+        startTimestamp: Math.round(since),
+        endTimestamp: Math.round(ts),
+        description: rule.description,
+        correctiveFeedback: rule.correction,
+        voiceCue: rule.voice,
+        recommendedAction: rule.recommendedAction,
+        category: rule.category,
+        measured: { value: round(f!.value, 3), threshold: thr, unit: FEATURES[c.feature]?.unit ?? "" },
+        repIndex,
+      };
+      this.provisional.set(err.type, err);
+      this.feedback.offerError(err, rule.importance, ts, true);
+    }
+  }
+
   private offerError(out: RuleOutcome, ts: number): void {
     const err = out.error;
     if (!err || this.offered.has(err.id)) return;
@@ -433,6 +480,14 @@ export class ExerciseAnalyzer {
 
     const ts = this.lastTs;
     for (const o of outcomes) this.offerError(o, ts);
+    // The main issue of this rep is always said right away, so the athlete knows what to fix in the next one.
+    const ranked = errors
+      .filter((e) => e.type !== "INCOMPLETE_RANGE_OF_MOTION")
+      .sort((a, b) => SEVERITY_RANK[b.severity] * b.confidence - SEVERITY_RANK[a.severity] * a.confidence);
+    for (const e of ranked) {
+      const rule = def.evaluationRules.find((r) => r.type === e.type);
+      if (this.feedback.offerError(e, rule?.importance ?? 0.5, ts, true)) break;
+    }
     if (!cycle.complete) {
       const e = errors[errors.length - 1]!;
       this.feedback.offerError(e, 0.7, ts);

@@ -201,6 +201,12 @@ export const romanianDeadlift: ExerciseDefinition = {
     { feature: "hipHeight", stat: "range", max: 0.15, weight: 1.5 },
     { feature: "wristToShoulderDistance", stat: "mean", min: 0.9, weight: 1 },
   ],
+  liveChecks: [
+    { rule: "KNEE_BEND_EXCESSIVE", phases: ["LOWERING", "BOTTOM"], persistMs: 300 },
+    { rule: "EXCESSIVE_TRUNK_FLEXION", phases: ["LOWERING", "BOTTOM"], persistMs: 250 },
+    { rule: "EXCESSIVE_BACKWARD_LEAN", phases: ["RISING", "STANDING"], persistMs: 300 },
+    { rule: "LATERAL_SHIFT", phases: ["LOWERING", "RISING"], persistMs: 300 },
+  ],
   comparisonFeatures: ["hipAngle", "kneeAngle", "trunkInclination", "shoulderHeightRel"],
   keyCheckpoints: [
     "Start i koniec w pozycji stojącej.",

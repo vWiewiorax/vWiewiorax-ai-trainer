@@ -33,7 +33,7 @@ export interface FeedbackOptions {
 export const DEFAULT_FEEDBACK: FeedbackOptions = {
   globalCooldownMs: 2500,
   repeatCooldownMs: 9000,
-  minConfidence: 0.5,
+  minConfidence: 0.4,
   maxVoicePerType: 3,
   visualTtlMs: 3500,
   maxAgeMs: 2500,
@@ -68,15 +68,19 @@ export class FeedbackEngine {
     this.occurrences.clear();
   }
 
-  /** Offer a detected technique error. Returns true when it was queued. */
-  offerError(err: TechniqueError, importance: number, t: number): boolean {
+  /**
+   * Offer a detected technique error. Returns true when it was queued.
+   * `immediate` skips the persistence check: used for live checks and for the
+   * main issue of a just-finished repetition, which the athlete must hear now.
+   */
+  offerError(err: TechniqueError, importance: number, t: number, immediate = false): boolean {
     if (err.confidence < this.opts.minConfidence) return false;
     const reps = this.occurrences.get(err.type) ?? new Set<number>();
     reps.add(err.repIndex ?? -1);
     this.occurrences.set(err.type, reps);
     // Persistence: minor issues must repeat across reps, moderate ones need either repetition or high confidence.
     const persistent =
-      err.severity === "HIGH" || reps.size >= 2 || (err.severity === "MODERATE" && err.confidence >= 0.7);
+      immediate || err.severity === "HIGH" || reps.size >= 2 || (err.severity === "MODERATE" && err.confidence >= 0.7);
     if (!persistent) return false;
     const repeatBoost = 1 + 0.25 * Math.min(4, reps.size - 1);
     this.queue({

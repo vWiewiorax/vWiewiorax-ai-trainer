@@ -362,6 +362,11 @@ export const deadlift: ExerciseDefinition = {
     { feature: "wristToShoulderDistance", stat: "mean", min: 0.9, weight: 1.5 },
     { feature: "wristHeight", stat: "min", max: 0.5, weight: 1 },
   ],
+  liveChecks: [
+    { rule: "EXCESSIVE_TRUNK_FLEXION", phases: ["LIFTING"], persistMs: 200 },
+    { rule: "EXCESSIVE_BACKWARD_LEAN", phases: ["LOCKOUT"], persistMs: 250 },
+    { rule: "LATERAL_SHIFT", phases: ["LIFTING"], persistMs: 300 },
+  ],
   comparisonFeatures: ["hipAngle", "kneeAngle", "trunkInclination", "hipHeight", "shoulderHeightRel"],
   keyCheckpoints: [
     "Sztanga nad środkiem stopy, barki nad sztangą lub minimalnie przed nią.",

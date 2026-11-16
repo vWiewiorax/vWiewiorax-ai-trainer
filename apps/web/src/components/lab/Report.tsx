@@ -3,6 +3,7 @@
 import type { Severity, TechniqueAnalysis } from "@trainer/engine";
 import { IconAlert, IconCheck, IconDownload } from "./icons";
 import { Row } from "./LiveLab";
+import { repIssues, scoreColor } from "./repIssues";
 
 const SEV: Record<Severity, { label: string; cls: string }> = {
   LOW: { label: "niski", cls: "bg-yellow-400 text-slate-950" },
@@ -64,28 +65,36 @@ export default function Report({ report: r }: { report: TechniqueAnalysis }) {
 
       <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">Powtórzenia</h3>
-        <table className="w-full text-sm">
-          <thead className="text-xs text-slate-400">
-            <tr>
-              <th className="text-left">#</th>
-              <th className="text-right">Ocena</th>
-              <th className="text-right">Pewność</th>
-              <th className="text-right">Czas</th>
-              <th className="text-right">Błędy</th>
-            </tr>
-          </thead>
-          <tbody>
-            {r.repetitions.map((rep) => (
-              <tr key={rep.id} className="border-t border-slate-800">
-                <td>{rep.index}{rep.incomplete ? " (niepełne)" : ""}</td>
-                <td className="text-right tabular-nums">{rep.techniqueScore ?? "-"}{rep.breakdown.scoreUncertainty ? ` ±${rep.breakdown.scoreUncertainty}` : ""}</td>
-                <td className="text-right tabular-nums">{Math.round(rep.analysisConfidence * 100)}%</td>
-                <td className="text-right tabular-nums">{sec(rep.durationMs)}</td>
-                <td className="text-right tabular-nums">{rep.detectedErrors.length}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ul className="space-y-2" data-testid="report-reps">
+          {r.repetitions.map((rep) => {
+            const issues = repIssues(r.exerciseId, rep);
+            return (
+              <li key={rep.id} className="rounded-lg border border-slate-800 p-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className={`rounded px-1.5 py-0.5 font-bold tabular-nums ${scoreColor(rep.techniqueScore, rep.incomplete)}`}>
+                    #{rep.index} {rep.incomplete ? "niepełne" : rep.techniqueScore ?? "?"}
+                    {rep.breakdown.scoreUncertainty ? ` ±${rep.breakdown.scoreUncertainty}` : ""}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {sec(rep.durationMs)}, pewność {Math.round(rep.analysisConfidence * 100)}%
+                  </span>
+                </div>
+                {issues.length === 0 ? (
+                  <p className="mt-1 text-emerald-300">{rep.techniqueScore === null ? "Bez oceny: za niska pewność analizy." : "Bez uwag."}</p>
+                ) : (
+                  <ul className="mt-1 space-y-1">
+                    {issues.map((i) => (
+                      <li key={i.type}>
+                        <span className={`mr-1.5 rounded px-1 text-xs ${SEV[i.severity].cls}`}>{i.label}</span>
+                        {i.correction}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       </div>
 
       <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">

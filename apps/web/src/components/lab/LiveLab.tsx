@@ -8,6 +8,14 @@ import { IconAlert, IconCamera, IconExpand, IconMute, IconStop, IconVolume } fro
 import Report from "./Report";
 import { REFERENCE_STORAGE_KEY } from "./referenceStorage";
 import { ExerciseSelect } from "./ExerciseSelect";
+import { repIssues, scoreColor, type RepIssue } from "./repIssues";
+
+interface RepEntry {
+  index: number;
+  score: number | null;
+  incomplete: boolean;
+  issues: RepIssue[];
+}
 
 type Phase = "idle" | "opening" | "preview" | "loading" | "running" | "report" | "error";
 
@@ -55,6 +63,7 @@ export default function LiveLab() {
   const [camInfo, setCamInfo] = useState<string | null>(null);
   const [far, setFar] = useState(false);
   const [heldCue, setHeldCue] = useState<FeedbackItem | null>(null);
+  const [repLog, setRepLog] = useState<RepEntry[]>([]);
   const newTabUrl = useSyncExternalStore(noopSubscribe, embeddedUrl, () => null);
 
   const stopAll = useCallback(() => {
@@ -159,6 +168,7 @@ export default function LiveLab() {
   const start = async () => {
     setReport(null);
     setCues([]);
+    setRepLog([]);
     const cam = cameraRef.current ?? (await openPreview());
     if (!cam) return;
     setError(null);
@@ -200,9 +210,11 @@ export default function LiveLab() {
             if (tr.length > 90) tr.shift();
           });
           drawOverlay(ctx, s, trailRef.current);
+          const rep = s.newRepetition;
+          if (rep) setRepLog((l) => [...l, { index: rep.index, score: rep.techniqueScore, incomplete: rep.incomplete, issues: repIssues(exercise.id, rep) }]);
           if (s.feedback) {
             const item = s.feedback;
-            if (item.voice) speechRef.current?.speak(item.voice, { interrupt: item.kind === "safety" });
+            if (item.voice) speechRef.current?.speak(item.voice, { interrupt: item.kind === "safety" || item.kind === "technique" });
             if (item.kind !== "rep") heldRef.current = { item, until: performance.now() + 5000 };
             if (item.kind !== "rep") setCues((c) => (c[0]?.text === item.text ? c : [item, ...c.filter((x) => x.text !== item.text)].slice(0, 6)));
           }
@@ -281,8 +293,21 @@ export default function LiveLab() {
                     )}
                   </div>
                 )}
-                {live.status === "analysing" && bigCue && (
-                  <div className={`absolute ${t.inset} rounded-lg font-semibold ${t.cue} ${cueColor(bigCue)}`} data-testid="big-cue">{bigCue.text}</div>
+                {live.status === "analysing" && (
+                  <div className={`absolute ${t.inset} flex flex-col gap-[1.5vmin]`}>
+                    {repLog.length > 0 && (
+                      <div className="flex flex-wrap gap-[1vmin]" data-testid="rep-strip">
+                        {repLog.slice(-8).map((r) => (
+                          <span key={r.index} className={`rounded-md px-2 py-0.5 font-bold tabular-nums ${far ? "text-[4vmin]" : "text-sm"} ${scoreColor(r.score, r.incomplete)}`}>
+                            #{r.index} {r.incomplete ? "niepełne" : r.score ?? "?"}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {bigCue && (
+                      <div className={`rounded-lg font-semibold ${t.cue} ${cueColor(bigCue)}`} data-testid="big-cue">{bigCue.text}</div>
+                    )}
+                  </div>
                 )}
                 {live.stopSetRecommended && (
                   <div className={`absolute inset-x-3 ${far ? "top-[40vmin] text-[5vmin]" : "top-24"} flex items-center gap-2 rounded-lg bg-red-600 px-4 py-3 font-semibold`}>
@@ -340,6 +365,14 @@ export default function LiveLab() {
             )}
             <button onClick={() => setVoice((v) => !v)} className="flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm">
               {voice ? <IconVolume /> : <IconMute />} Głos {voice ? "włączony" : "wyłączony"}
+            </button>
+            <button
+              onClick={() => {
+                new BrowserSpeech("pl-PL").speak("Biodra w tył, plecy proste.", { interrupt: true });
+              }}
+              className="rounded-lg border border-slate-700 px-3 py-2 text-sm"
+            >
+              Test głosu
             </button>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="camera-settings">
@@ -426,6 +459,24 @@ export default function LiveLab() {
                 <Row k="Faza ruchu" v={live?.phaseLabel ?? "-"} />
                 <Row k="Średnia ocena serii" v={live?.setScore != null ? `${live.setScore} / 100` : "-"} />
                 <Row k="Pewność analizy serii" v={live && live.setScore != null ? `${Math.round(live.setConfidence * 100)}%` : "-"} />
+              </Panel>
+              <Panel title="Powtórzenia">
+                {repLog.length === 0 ? (
+                  <p className="text-sm text-slate-400">Każde powtórzenie pojawi się tu z oceną i tym, co poprawić.</p>
+                ) : (
+                  <ul className="space-y-1.5" data-testid="rep-log">
+                    {[...repLog].reverse().map((r) => (
+                      <li key={r.index} className="flex items-start gap-2 text-sm">
+                        <span className={`shrink-0 rounded px-1.5 py-0.5 font-bold tabular-nums ${scoreColor(r.score, r.incomplete)}`}>
+                          #{r.index} {r.incomplete ? "-" : r.score ?? "?"}
+                        </span>
+                        <span className={r.issues.length ? "" : "text-emerald-300"}>
+                          {r.issues.length ? r.issues.slice(0, 2).map((i) => i.correction).join(" ") : r.score === null ? "Bez oceny: za niska pewność analizy." : "Bez uwag."}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </Panel>
               <Panel title="Podpowiedzi">
                 {cues.length === 0 ? (
