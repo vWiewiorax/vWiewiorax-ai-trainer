@@ -50,6 +50,7 @@ Bez VS Code: `flutter run` w `apps/mobile`.
   ```
   cd packages/engine
   npx tsx scripts/gen-dart.ts
+  cd ../trainer_engine; dart format -l 120 lib/src/exercises.dart; cd ../engine
   npx tsx scripts/export-parity.ts
   ```
 

@@ -29,7 +29,7 @@ function rule(r: ErrorDefinition): string {
   const a = [
     `type: ${s(r.type)}`, `label: ${s(r.label)}`, `category: ${s(r.category)}`, `importance: ${n(r.importance)}`,
     `views: ${views(r.views)}`, `reliability: ${n(r.reliability)}`, `minConfidence: ${n(r.minConfidence)}`,
-    `condition: ${cond(r.condition)}`, `description: ${s(r.description)}`, `correction: ${s(r.correction)}`, `voice: ${s(r.voice)}`,
+    `condition: ${cond(r.condition as RuleCondition)}`, `description: ${s(r.description)}`, `correction: ${s(r.correction)}`, `voice: ${s(r.voice)}`,
   ];
   if (r.recommendedAction) a.push(`recommendedAction: ${s(r.recommendedAction)}`);
   if (r.safetyCritical) a.push("safetyCritical: true");
